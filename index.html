@@ -240,6 +240,48 @@
   }
   .loading { padding: 60px 16px; text-align: center; color: var(--muted); }
 
+  .modal-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(15, 30, 38, .45);
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  .modal-bg[hidden] { display: none; }
+  .modal {
+    width: min(360px, 100%);
+    background: #fff;
+    border-radius: 16px;
+    padding: 22px 20px 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2);
+  }
+  .modal h3 { margin: 0 0 6px; font-size: 18px; }
+  .modal p { margin: 0 0 14px; font-size: 14px; color: var(--muted); word-break: break-all; }
+  .modal input {
+    width: 100%;
+    font: inherit;
+    font-size: 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .modal input:focus { outline: 2px solid var(--sea); border-color: transparent; }
+  .modal .err { min-height: 20px; margin: 6px 0 0; font-size: 13px; color: var(--danger); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+  .modal-actions button {
+    font: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 9px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: #fff;
+    cursor: pointer;
+  }
+  .modal-actions .danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
   @media (max-width: 760px) {
     .layout { grid-template-columns: 1fr; }
     .viewer { display: none; }
@@ -298,6 +340,19 @@
   </div>
 </main>
 
+<div class="modal-bg" id="delModal" hidden>
+  <form class="modal" id="delForm">
+    <h3>자료 삭제</h3>
+    <p id="delName"></p>
+    <input type="password" id="delPw" inputmode="numeric" autocomplete="off" placeholder="삭제 비밀번호">
+    <div class="err" id="delErr"></div>
+    <div class="modal-actions">
+      <button type="button" id="delCancel">취소</button>
+      <button type="submit" class="danger">삭제</button>
+    </div>
+  </form>
+</div>
+
 <script>
   /* ============================================================
      ▼ Supabase 설정 — 이 두 줄만 본인 값으로 바꿔 주세요
@@ -305,6 +360,8 @@
   const SUPABASE_URL = "https://waslzzheyllzjtdisnlt.supabase.co";
   const SUPABASE_KEY = "sb_publishable_6Vaoz6fefDW9cvdeiNkCUA_4CyglM-O";
   const BUCKET = "trip";
+  // 삭제 비밀번호(1234)를 암호화한 값 — 비밀번호를 바꾸려면 새 값으로 교체
+  const DELETE_PW_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
   /* ============================================================ */
 
   const list = document.getElementById("list");
@@ -514,6 +571,52 @@
     renderPdf(url);
   }
 
+  /* ---------- 비밀번호 확인 후 삭제 ---------- */
+  const delModal = document.getElementById("delModal");
+  const delForm = document.getElementById("delForm");
+  const delName = document.getElementById("delName");
+  const delPw = document.getElementById("delPw");
+  const delErr = document.getElementById("delErr");
+  let pendingDelete = null;
+
+  async function sha256(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  function askDelete(file) {
+    pendingDelete = file;
+    delName.textContent = `'${file.name}' 자료를 삭제하려면 비밀번호를 입력하세요. 삭제하면 모든 사람의 화면에서 사라져요.`;
+    delPw.value = "";
+    delErr.textContent = "";
+    delModal.hidden = false;
+    setTimeout(() => delPw.focus(), 50);
+  }
+  function closeDelete() {
+    delModal.hidden = true;
+    pendingDelete = null;
+  }
+  document.getElementById("delCancel").addEventListener("click", closeDelete);
+  delModal.addEventListener("click", (e) => { if (e.target === delModal) closeDelete(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !delModal.hidden) closeDelete(); });
+
+  delForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = pendingDelete;
+    if (!f) return;
+    if ((await sha256(delPw.value.trim())) !== DELETE_PW_HASH) {
+      delErr.textContent = "비밀번호가 맞지 않아요.";
+      delPw.select();
+      return;
+    }
+    const { error } = await store.remove([f.key]);
+    if (error) { delErr.textContent = "삭제하지 못했어요: " + error.message; return; }
+    closeDelete();
+    if (f.key === activeKey) resetViewer();
+    setStatus("삭제했어요.");
+    render();
+  });
+
   async function render() {
     if (!store) {
       list.innerHTML = '<li class="empty">아직 저장 공간이 연결되지 않았어요.<br>' + setupProblem + '</li>';
@@ -559,14 +662,7 @@
       del.title = "삭제";
       del.setAttribute("aria-label", f.name + " 삭제");
       del.textContent = "×";
-      del.addEventListener("click", async () => {
-        if (!confirm(`'${f.name}' 자료를 삭제할까요?\n모든 사람의 화면에서 사라져요.`)) return;
-        const { error } = await store.remove([f.key]);
-        if (error) { setStatus("삭제하지 못했어요: " + error.message, true); return; }
-        if (f.key === activeKey) resetViewer();
-        setStatus("삭제했어요.");
-        render();
-      });
+      del.addEventListener("click", () => askDelete(f));
 
       li.append(btn, del);
       list.appendChild(li);
