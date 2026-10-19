@@ -316,7 +316,7 @@
   <div class="wrap">
     <span class="eyebrow">2026 함현고 2학년 주제별 체험학습</span>
     <h1>제주 수학여행 자료실</h1>
-    <p>수학여행 자료를 직접 올리고 함께 볼 수 있어요. (pdf 파일만 가능)</p>
+    <p>수학여행 자료를 직접 올리고 함께 볼 수 있어요. (PDF, JPG, PNG 파일 가능)</p>
   </div>
 </header>
 
@@ -333,9 +333,9 @@
       </div>
 
       <label class="drop" id="drop">
-        <input type="file" id="picker" accept="application/pdf,.pdf" multiple>
-        <strong>＋ <em id="dropTarget" style="font-style:normal">공통 자료</em>에 PDF 올리기</strong>
-        <span>여기를 누르거나 파일을 끌어다 놓으세요 (여러 개 가능, 한 파일 30MB까지)</span>
+        <input type="file" id="picker" accept="application/pdf,.pdf,image/jpeg,.jpg,.jpeg,image/png,.png" multiple>
+        <strong>＋ <em id="dropTarget" style="font-style:normal">공통</em>에 PDF·이미지 파일 올리기</strong>
+        <span>여기를 누르거나 파일을 끌어다 놓으세요 (PDF·JPG·PNG, 여러 개 가능, 한 파일 30MB까지)</span>
       </label>
       <div class="status" id="status"></div>
 
@@ -409,7 +409,15 @@
   }
 
   /* ---------- 공통 ---------- */
-  const displayName = (n) => n.replace(/\.pdf$/i, "");
+  const displayName = (n) => n.replace(/\.(pdf|jpe?g|png)$/i, "");
+  // 파일 종류 알아내기 (휴대폰에서 type이 비어 있는 경우 확장자로 판단)
+  function fileType(f) {
+    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) return "application/pdf";
+    if (f.type === "image/jpeg" || /\.jpe?g$/i.test(f.name)) return "image/jpeg";
+    if (f.type === "image/png" || /\.png$/i.test(f.name)) return "image/png";
+    return "";
+  }
+  const typeLabel = (t) => (t === "image/jpeg" ? "JPG" : t === "image/png" ? "PNG" : "PDF");
   const fmtDate = (t) => new Date(t).toLocaleString("ko-KR", {
     month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
@@ -543,7 +551,7 @@
     });
     const isCommon = current.id === "common";
     listTitle.textContent = isCommon ? "공통 자료" : current.label + " 자료";
-    document.getElementById("dropTarget").textContent = isCommon ? "공통 자료" : current.label;
+    document.getElementById("dropTarget").textContent = isCommon ? "공통" : current.label;
     document.title = (isCommon ? "" : current.label + " · ") + "제주 수학여행 자료실";
     countEl.textContent = "";
     document.getElementById("hint").hidden = true;
@@ -581,7 +589,7 @@
     list.innerHTML = "";
 
     if (!files.length) {
-      list.innerHTML = `<li class="empty">아직 ${sec.id === "common" ? "공통" : sec.label} 자료가 없어요.<br>위에서 PDF를 올려 보세요.</li>`;
+      list.innerHTML = `<li class="empty">아직 ${sec.id === "common" ? "공통" : sec.label} 자료가 없어요.<br>위에서 자료를 올려 보세요.</li>`;
       return;
     }
 
@@ -593,7 +601,7 @@
       btn.innerHTML = `<span class="num">${i + 1}</span>
         <span class="meta"><span class="fname"></span><span class="fdate"></span></span>`;
       btn.querySelector(".fname").textContent = displayName(f.name);
-      btn.querySelector(".fdate").textContent = fmtDate(f.time) + " 업로드 · " + fmtSize(f.size);
+      btn.querySelector(".fdate").textContent = fmtDate(f.time) + " 업로드 · " + typeLabel(f.type) + " · " + fmtSize(f.size);
       btn.addEventListener("click", () => show(f, btn));
 
       const del = document.createElement("button");
@@ -622,15 +630,15 @@
     if (!configured) return;
     const sec = current;
     const all = Array.from(fileList);
-    const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    const pdfs = all.filter((f) => fileType(f));
     const notPdf = all.length - pdfs.length;
     const tooBig = pdfs.filter((f) => f.size > MAX_MB * 1048576);
     const ok = pdfs.filter((f) => f.size <= MAX_MB * 1048576);
 
     if (!ok.length) {
       setStatus(tooBig.length
-        ? `${MAX_MB}MB보다 큰 파일은 올릴 수 없어요. PDF를 압축해서 올려 주세요.`
-        : "PDF 파일만 올릴 수 있어요.", true);
+        ? `${MAX_MB}MB보다 큰 파일은 올릴 수 없어요. 압축해서 올려 주세요.`
+        : "PDF, JPG, PNG 파일만 올릴 수 있어요.", true);
       return;
     }
 
@@ -642,7 +650,7 @@
       setStatus(`${sec.label}에 올리는 중… (${i + 1}/${ok.length}) ${f.name}`);
       try {
         const data = await readBase64(f);
-        await apiPost({ action: "upload", section: sec.id, name: f.name, data });
+        await apiPost({ action: "upload", section: sec.id, name: f.name, type: fileType(f), data });
         done++;
       } catch (err) {
         fails.push(`${f.name} (${err.message})`);
@@ -652,7 +660,7 @@
     if (sec === current) await render();
 
     let msg = `${sec.label}에 ${done}개 자료를 올렸어요.`;
-    if (notPdf) msg += ` PDF가 아닌 파일 ${notPdf}개는 제외했어요.`;
+    if (notPdf) msg += ` PDF·JPG·PNG가 아닌 파일 ${notPdf}개는 제외했어요.`;
     if (tooBig.length) msg += ` ${MAX_MB}MB가 넘는 파일 ${tooBig.length}개는 압축 후 올려 주세요.`;
     if (fails.length) msg += ` 실패: ${fails.join(", ")}`;
     setStatus(msg, fails.length > 0 || tooBig.length > 0);
