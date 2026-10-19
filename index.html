@@ -1,5 +1,3 @@
----
----
 <!doctype html>
 <html lang="ko">
 <head>
@@ -18,6 +16,7 @@
     --muted: #61707a;
     --card: #ffffff;
     --line: #e4ddd0;
+    --danger: #c0392b;
   }
   * { box-sizing: border-box; }
   body {
@@ -62,7 +61,7 @@
   main { padding: 8px 16px 48px; }
   .layout {
     display: grid;
-    grid-template-columns: 340px 1fr;
+    grid-template-columns: 360px 1fr;
     gap: 20px;
     align-items: start;
   }
@@ -72,35 +71,34 @@
     border-radius: 16px;
     padding: 18px;
   }
-  .panel-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-  .panel-head h2 { font-size: 18px; margin: 0; }
-  .count { color: var(--muted); font-size: 14px; }
+  .panel h2 { font-size: 18px; margin: 0; }
+  .count { color: var(--muted); font-size: 14px; margin-left: 6px; }
 
-  .upload-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--tangerine);
-    color: #fff;
-    text-decoration: none;
-    font-weight: 700;
-    font-size: 14px;
-    padding: 8px 14px;
-    border-radius: 10px;
-    white-space: nowrap;
+  /* 업로드 영역 */
+  .drop {
+    display: block;
+    margin: 14px 0 16px;
+    border: 2px dashed #b9cfd6;
+    border-radius: 14px;
+    background: #f3f9fb;
+    padding: 22px 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
   }
-  .upload-btn:hover { filter: brightness(.95); }
+  .drop:hover, .drop.over { background: #e3f2f6; border-color: var(--sea); }
+  .drop strong { display: block; color: var(--sea-deep); font-size: 16px; }
+  .drop span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
+  .drop input { display: none; }
+  .status { min-height: 20px; font-size: 13px; color: var(--sea-deep); margin: -6px 0 10px; }
+  .status.err { color: var(--danger); }
 
   ol.files { list-style: none; margin: 0; padding: 0; }
+  ol.files li { display: flex; gap: 6px; align-items: stretch; }
   ol.files li + li { margin-top: 8px; }
   .file {
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 12px;
@@ -108,7 +106,7 @@
     background: #fbf9f4;
     border: 1px solid var(--line);
     border-radius: 12px;
-    padding: 12px;
+    padding: 10px 12px;
     font: inherit;
     color: inherit;
     cursor: pointer;
@@ -126,7 +124,26 @@
     font-size: 14px;
     font-weight: 700;
   }
-  .fname { font-weight: 500; word-break: break-all; }
+  .meta { min-width: 0; }
+  .fname { display: block; font-weight: 500; word-break: break-all; }
+  .fdate { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .del {
+    flex: none;
+    width: 40px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .del:hover { color: var(--danger); border-color: var(--danger); }
+  .empty {
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--muted);
+    line-height: 1.7;
+  }
 
   .viewer { padding: 0; overflow: hidden; }
   .viewer-bar {
@@ -152,18 +169,6 @@
     border: 0;
     background: #eee;
   }
-  .empty {
-    padding: 60px 20px;
-    text-align: center;
-    color: var(--muted);
-    line-height: 1.7;
-  }
-  .note {
-    margin-top: 14px;
-    font-size: 13px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
 
   @media (max-width: 760px) {
     .layout { grid-template-columns: 1fr; }
@@ -176,25 +181,26 @@
   <div class="wrap">
     <span class="eyebrow">수학여행</span>
     <h1>제주 수학여행 자료실</h1>
-    <p>일정표, 안내문, 활동지 등 수학여행 자료를 한곳에서 볼 수 있어요.</p>
+    <p>일정표, 안내문, 활동지 등 수학여행 자료를 올리고 바로 볼 수 있어요.</p>
   </div>
 </header>
 
 <main>
   <div class="wrap layout">
     <section class="panel">
-      <div class="panel-head">
-        <div>
-          <h2>자료 목록</h2>
-          <span class="count" id="count"></span>
-        </div>
-        <a class="upload-btn" id="upload" target="_blank" rel="noopener">＋ 자료 올리기</a>
-      </div>
+      <h2>자료 목록<span class="count" id="count"></span></h2>
+
+      <label class="drop" id="drop">
+        <input type="file" id="picker" accept="application/pdf,.pdf" multiple>
+        <strong>＋ PDF 자료 올리기</strong>
+        <span>여기를 누르거나 파일을 끌어다 놓으세요 (여러 개 가능)</span>
+      </label>
+      <div class="status" id="status"></div>
+
       <ol class="files" id="list"></ol>
-      <p class="note">파일 이름 순서대로 보여요. 이름 앞에 01_, 02_ 처럼 번호를 붙이면 원하는 순서로 정렬됩니다.</p>
     </section>
 
-    <section class="panel viewer" id="viewer">
+    <section class="panel viewer">
       <div class="viewer-bar">
         <span class="viewer-title" id="vtitle">자료를 선택하세요</span>
         <a class="open-link" id="vopen" target="_blank" rel="noopener" hidden>새 창에서 열기 ↗</a>
@@ -204,80 +210,197 @@
   </div>
 </main>
 
-{% assign pdf_lower = site.static_files | where: "extname", ".pdf" %}
-{% assign pdf_upper = site.static_files | where: "extname", ".PDF" %}
-{% assign all_pdfs = pdf_lower | concat: pdf_upper %}
-<script type="application/json" id="pdf-data">{{ all_pdfs | map: "path" | jsonify }}</script>
-
 <script>
-  // ▼ 본인 GitHub 아이디와 저장소 이름
-  const OWNER = "moonissaam";
-  const REPO = "jeju";
+  /* ---------- 저장소 (브라우저 IndexedDB) ---------- */
+  const DB_NAME = "jeju-trip-files";
+  const STORE = "files";
+  let memory = [];          // IndexedDB를 못 쓸 때 임시 저장
+  let dbPromise = null;
 
-  document.getElementById("upload").href =
-    `https://github.com/${OWNER}/${REPO}/upload/main`;
+  function openDB() {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      } catch (e) { reject(e); }
+    });
+    return dbPromise;
+  }
 
+  async function getAll() {
+    try {
+      const db = await openDB();
+      return await new Promise((res, rej) => {
+        const r = db.transaction(STORE).objectStore(STORE).getAll();
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+    } catch (e) { return memory.slice(); }
+  }
+
+  async function add(record) {
+    try {
+      const db = await openDB();
+      await new Promise((res, rej) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).add(record);
+        tx.oncomplete = res;
+        tx.onerror = () => rej(tx.error);
+      });
+    } catch (e) {
+      record.id = Date.now() + Math.random();
+      memory.push(record);
+    }
+  }
+
+  async function remove(id) {
+    try {
+      const db = await openDB();
+      await new Promise((res, rej) => {
+        const tx = db.transaction(STORE, "readwrite");
+        tx.objectStore(STORE).delete(id);
+        tx.oncomplete = res;
+        tx.onerror = () => rej(tx.error);
+      });
+    } catch (e) {
+      memory = memory.filter((f) => f.id !== id);
+    }
+  }
+
+  /* ---------- 화면 ---------- */
   const list = document.getElementById("list");
   const countEl = document.getElementById("count");
+  const statusEl = document.getElementById("status");
+  const drop = document.getElementById("drop");
+  const picker = document.getElementById("picker");
   const vtitle = document.getElementById("vtitle");
   const vopen = document.getElementById("vopen");
   const vbody = document.getElementById("vbody");
 
-  let paths = [];
-  try {
-    paths = JSON.parse(document.getElementById("pdf-data").textContent);
-  } catch (e) {
-    list.innerHTML = '<li class="empty">GitHub Pages에 올리면 자료 목록이 여기에 나타나요.</li>';
+  let currentUrl = null;
+  let activeId = null;
+
+  const displayName = (n) => n.replace(/\.pdf$/i, "");
+  const fmtDate = (t) => new Date(t).toLocaleString("ko-KR", {
+    month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
+  });
+
+  function setStatus(msg, isErr) {
+    statusEl.textContent = msg || "";
+    statusEl.classList.toggle("err", !!isErr);
   }
 
-  const toName = (p) => {
-    const file = decodeURIComponent(p.split("/").pop());
-    return file.replace(/\.pdf$/i, "").replace(/^\d+[_.\-\s]+/, "");
-  };
-  const toUrl = (p) => encodeURI(p.replace(/^\//, ""));
-
-  paths.sort((a, b) =>
-    a.split("/").pop().localeCompare(b.split("/").pop(), "ko", { numeric: true })
-  );
-
-  countEl.textContent = paths.length ? `${paths.length}개` : "";
-  if (paths.length === 0 && !list.children.length) {
-    list.innerHTML = '<li class="empty">아직 올라온 자료가 없어요.<br>‘자료 올리기’로 PDF를 추가해 보세요.</li>';
+  function resetViewer() {
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = null;
+    activeId = null;
+    vtitle.textContent = "자료를 선택하세요";
+    vopen.hidden = true;
+    vbody.className = "empty";
+    vbody.innerHTML = "왼쪽 목록에서 자료를 누르면<br>여기에서 바로 볼 수 있어요.";
   }
 
   const inlineViewer = () =>
     !window.matchMedia("(max-width: 760px)").matches &&
     navigator.pdfViewerEnabled !== false;
 
-  function show(path, btn) {
-    const url = toUrl(path);
+  function show(file, btn) {
+    const blob = file.blob instanceof Blob ? file.blob : new Blob([file.blob], { type: "application/pdf" });
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = URL.createObjectURL(blob);
+
     if (!inlineViewer()) {
-      window.open(url, "_blank", "noopener");
+      window.open(currentUrl, "_blank");
       return;
     }
+    activeId = file.id;
     document.querySelectorAll(".file.active").forEach((el) => el.classList.remove("active"));
     btn.classList.add("active");
-    vtitle.textContent = toName(path);
-    vopen.href = url;
+    vtitle.textContent = displayName(file.name);
+    vopen.href = currentUrl;
     vopen.hidden = false;
     vbody.className = "";
     vbody.innerHTML = "";
     const frame = document.createElement("iframe");
-    frame.src = url;
-    frame.title = toName(path);
+    frame.src = currentUrl;
+    frame.title = displayName(file.name);
     vbody.appendChild(frame);
   }
 
-  paths.forEach((p, i) => {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.className = "file";
-    btn.innerHTML = `<span class="num">${i + 1}</span><span class="fname"></span>`;
-    btn.querySelector(".fname").textContent = toName(p);
-    btn.addEventListener("click", () => show(p, btn));
-    li.appendChild(btn);
-    list.appendChild(li);
+  async function render() {
+    const files = (await getAll()).sort((a, b) => a.addedAt - b.addedAt); // 올린 순서대로
+    countEl.textContent = files.length ? `${files.length}개` : "";
+    list.innerHTML = "";
+
+    if (!files.length) {
+      list.innerHTML = '<li class="empty">아직 올라온 자료가 없어요.<br>위에서 PDF를 올려 보세요.</li>';
+      return;
+    }
+
+    files.forEach((f, i) => {
+      const li = document.createElement("li");
+
+      const btn = document.createElement("button");
+      btn.className = "file" + (f.id === activeId ? " active" : "");
+      btn.innerHTML = `<span class="num">${i + 1}</span>
+        <span class="meta"><span class="fname"></span><span class="fdate"></span></span>`;
+      btn.querySelector(".fname").textContent = displayName(f.name);
+      btn.querySelector(".fdate").textContent = fmtDate(f.addedAt) + " 업로드";
+      btn.addEventListener("click", () => show(f, btn));
+
+      const del = document.createElement("button");
+      del.className = "del";
+      del.title = "삭제";
+      del.setAttribute("aria-label", displayName(f.name) + " 삭제");
+      del.textContent = "×";
+      del.addEventListener("click", async () => {
+        if (!confirm(`'${displayName(f.name)}' 자료를 삭제할까요?`)) return;
+        await remove(f.id);
+        if (f.id === activeId) resetViewer();
+        render();
+      });
+
+      li.append(btn, del);
+      list.appendChild(li);
+    });
+  }
+
+  async function handleFiles(fileList) {
+    const all = Array.from(fileList);
+    const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    const skipped = all.length - pdfs.length;
+    if (!pdfs.length) {
+      setStatus("PDF 파일만 올릴 수 있어요.", true);
+      return;
+    }
+    setStatus("올리는 중…");
+    const base = Date.now();
+    for (let i = 0; i < pdfs.length; i++) {
+      const f = pdfs[i];
+      await add({ name: f.name, size: f.size, addedAt: base + i, blob: f });
+    }
+    await render();
+    setStatus(`${pdfs.length}개 자료를 올렸어요.` + (skipped ? ` (PDF가 아닌 파일 ${skipped}개는 제외)` : ""));
+  }
+
+  picker.addEventListener("change", () => {
+    handleFiles(picker.files);
+    picker.value = "";
   });
+  ["dragenter", "dragover"].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); })
+  );
+  drop.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+
+  render();
 </script>
 </body>
 </html>
