@@ -6,7 +6,6 @@
 <title>함현고 제주 수학여행 자료실</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --sea: #0e6e8c;
@@ -59,6 +58,38 @@
     letter-spacing: -0.02em;
   }
   header p { margin: 0; opacity: .85; }
+
+  .tabs-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--sand);
+    padding: 6px 16px 10px;
+  }
+  .tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab {
+    flex: none;
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 9px 16px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .tab:hover { border-color: var(--sea); color: var(--sea); }
+  .tab.common { border-color: var(--tangerine); color: #b5600f; }
+  .tab[aria-selected="true"] { background: var(--sea); border-color: var(--sea); color: #fff; }
+  .tab.common[aria-selected="true"] { background: var(--tangerine); border-color: var(--tangerine); color: #fff; }
 
   main { padding: 8px 16px 48px; }
   .layout {
@@ -189,24 +220,12 @@
     border-radius: 8px;
     cursor: pointer;
   }
-  #vbody.pages {
-    height: 78vh;
-    overflow-y: auto;
-    background: #e9e6df;
-    padding: 12px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .page {
+  #vbody.frame {
     position: relative;
-    width: 100%;
-    background: #fff;
-    box-shadow: 0 1px 4px rgba(0,0,0,.15);
-    aspect-ratio: 1 / 1.414;
+    height: 78vh;
+    background: #f3f0ea;
   }
-  .page + .page { margin-top: 12px; }
-  .page canvas { display: block; width: 100%; height: auto; }
-  .page.waiting::before {
-    content: "페이지 그리는 중…";
+  #vbody.frame .frame-loading {
     position: absolute;
     inset: 0;
     display: grid;
@@ -214,29 +233,12 @@
     color: var(--muted);
     font-size: 14px;
   }
-  .progress {
-    width: min(260px, 80%);
-    height: 8px;
-    margin: 14px auto 0;
-    background: #ddd6c8;
-    border-radius: 999px;
-    overflow: hidden;
-  }
-  .progress > i {
+  #vbody.frame iframe {
+    position: relative;
     display: block;
+    width: 100%;
     height: 100%;
-    width: 0;
-    background: var(--sea);
-    transition: width .2s;
-  }
-  .page-no {
-    position: absolute;
-    right: 8px; bottom: 8px;
-    font-size: 12px;
-    background: rgba(0,0,0,.55);
-    color: #fff;
-    padding: 2px 8px;
-    border-radius: 999px;
+    border: 0;
   }
   .loading { padding: 60px 16px; text-align: center; color: var(--muted); }
 
@@ -294,7 +296,7 @@
       border-radius: 0;
       border: 0;
     }
-    .viewer.open #vbody.pages { flex: 1; height: auto; padding: 8px; }
+    .viewer.open #vbody.frame { flex: 1; height: auto; }
     .viewer.open .close-btn { display: inline-block; }
     body.viewing { overflow: hidden; }
   }
@@ -309,18 +311,22 @@
   </div>
 </header>
 
+<nav class="tabs-wrap" aria-label="반 선택">
+  <div class="wrap tabs" id="tabs" role="tablist"></div>
+</nav>
+
 <main>
   <div class="wrap layout">
     <section class="panel">
       <div class="panel-head">
-        <h2>자료 목록<span class="count" id="count"></span></h2>
+        <h2><span id="listTitle">공통 자료</span><span class="count" id="count"></span></h2>
         <button class="refresh" id="refresh" type="button">↻ 새로고침</button>
       </div>
 
       <label class="drop" id="drop">
         <input type="file" id="picker" accept="application/pdf,.pdf" multiple>
-        <strong>＋ PDF 자료 올리기</strong>
-        <span>여기를 누르거나 파일을 끌어다 놓으세요 (여러 개 가능)</span>
+        <strong>＋ <em id="dropTarget" style="font-style:normal">공통 자료</em>에 PDF 올리기</strong>
+        <span>여기를 누르거나 파일을 끌어다 놓으세요 (여러 개 가능, 한 파일 30MB까지)</span>
       </label>
       <div class="status" id="status"></div>
 
@@ -355,14 +361,13 @@
 
 <script>
   /* ============================================================
-     ▼ Supabase 설정 — 이 두 줄만 본인 값으로 바꿔 주세요
+     ▼ 구글 Apps Script 웹 앱 주소 — 이 한 줄만 바꿔 주세요
+       (https://script.google.com/macros/s/……/exec 형태)
      ============================================================ */
-  const SUPABASE_URL = "https://waslzzheyllzjtdisnlt.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_6Vaoz6fefDW9cvdeiNkCUA_4CyglM-O";
-  const BUCKET = "trip";
-  // 삭제 비밀번호(1234)를 암호화한 값 — 비밀번호를 바꾸려면 새 값으로 교체
-  const DELETE_PW_HASH = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxtDDbw5fdbJKaQa2_Jfr4kyWR2Bw_p9sxX9l-2MGL9DtZGJULCJ9yHXZoiG3B60Ecjcw/exec";
   /* ============================================================ */
+
+  const MAX_MB = 30;
 
   const list = document.getElementById("list");
   const countEl = document.getElementById("count");
@@ -372,98 +377,49 @@
   const vtitle = document.getElementById("vtitle");
   const vopen = document.getElementById("vopen");
   const vbody = document.getElementById("vbody");
+  const viewerEl = document.getElementById("viewer");
+  const vclose = document.getElementById("vclose");
 
-  let activeKey = null;
-  let store = null;
+  const scriptUrl = SCRIPT_URL.trim();
+  const configured = /^https:\/\/script\.google(usercontent)?\.com\/.+/.test(scriptUrl);
 
-  // 입력값 정리: 앞뒤 공백 제거, https:// 자동 추가, 끝의 / 나 경로 제거
-  let projectUrl = SUPABASE_URL.trim();
-  // 프로젝트 ID만 넣은 경우(예: abcdxyz) 자동으로 주소 완성
-  if (/^[a-z0-9]{10,40}$/i.test(projectUrl)) projectUrl = projectUrl + ".supabase.co";
-  if (projectUrl && !projectUrl.startsWith("여기에") && !/^https?:\/\//i.test(projectUrl)) {
-    projectUrl = "https://" + projectUrl;
+  /* ---------- 서버(Apps Script) 호출 ---------- */
+  async function apiGet(params) {
+    const res = await fetch(scriptUrl + "?" + new URLSearchParams(params));
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "알 수 없는 오류");
+    return json;
   }
-  projectUrl = projectUrl.replace(/(\.supabase\.co).*$/i, "$1").replace(/\/+$/, "");
-  const projectKey = SUPABASE_KEY.trim();
-
-  let setupProblem = "";
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(projectUrl)) {
-    setupProblem = "SUPABASE_URL 값이 올바르지 않아요.<br>https://프로젝트ID.supabase.co 형태로 넣어 주세요.";
-  } else if (!projectKey || projectKey.startsWith("여기에")) {
-    setupProblem = "SUPABASE_KEY 값이 비어 있어요.<br>Publishable key를 붙여 넣어 주세요.";
-  } else if (!window.supabase) {
-    setupProblem = "Supabase 프로그램을 불러오지 못했어요.<br>인터넷 연결을 확인하거나, 학교망이라면 다른 네트워크에서 열어 보세요.";
-  } else {
-    try {
-      store = window.supabase.createClient(projectUrl, projectKey).storage.from(BUCKET);
-    } catch (e) {
-      setupProblem = "Supabase 연결 중 오류가 났어요: " + e.message;
-    }
+  async function apiPost(body) {
+    // Content-Type을 지정하지 않아야 구글 서버와 바로 통신돼요
+    const res = await fetch(scriptUrl, { method: "POST", body: JSON.stringify(body) });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "알 수 없는 오류");
+    return json;
   }
 
-  /* 한글 파일 이름을 안전하게 저장하기 위한 변환
-     저장 이름 형식: 업로드시각_인코딩된원래이름.pdf  → 시각 순으로 정렬됨 */
-  function encodeName(name) {
-    const bytes = new TextEncoder().encode(name);
-    let bin = "";
-    bytes.forEach((b) => (bin += String.fromCharCode(b)));
-    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-  }
-  function decodeName(enc) {
-    try {
-      let s = enc.replace(/-/g, "+").replace(/_/g, "/");
-      while (s.length % 4) s += "=";
-      const bin = atob(s);
-      return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
-    } catch (e) { return enc; }
-  }
-  function parseKey(key) {
-    const m = key.match(/^(\d+)_(.+)\.pdf$/i);
-    if (!m) return { time: 0, name: key.replace(/\.pdf$/i, "") };
-    return { time: Number(m[1]), name: decodeName(m[2]).replace(/\.pdf$/i, "") };
-  }
-
+  /* ---------- 공통 ---------- */
+  const displayName = (n) => n.replace(/\.pdf$/i, "");
   const fmtDate = (t) => new Date(t).toLocaleString("ko-KR", {
     month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
+  const fmtSize = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + "MB" : Math.max(1, Math.round(b / 1024)) + "KB";
 
   function setStatus(msg, isErr) {
     statusEl.textContent = msg || "";
     statusEl.classList.toggle("err", !!isErr);
   }
 
+  /* ---------- 미리보기 (구글 드라이브 뷰어) ---------- */
+  let activeId = null;
+  const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
+
   function resetViewer() {
-    stopRender();
-    activeKey = null;
+    activeId = null;
     vtitle.textContent = "자료를 선택하세요";
     vopen.hidden = true;
     vbody.className = "empty";
     vbody.innerHTML = "왼쪽 목록에서 자료를 누르면<br>여기에서 바로 볼 수 있어요.";
-  }
-
-  /* ---------- PDF 미리보기 (PC·휴대폰 모두 페이지 안에서 표시) ---------- */
-  const viewerEl = document.getElementById("viewer");
-  const vclose = document.getElementById("vclose");
-  const PDFJS = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/legacy/build/";
-  let pdfjsLib = null;
-  let currentDoc = null;
-  let observer = null;
-  let renderToken = 0;
-
-  const isMobile = () => window.matchMedia("(max-width: 760px)").matches;
-
-  async function loadPdfJs() {
-    if (pdfjsLib) return pdfjsLib;
-    const lib = await import(PDFJS + "pdf.min.mjs");
-    lib.GlobalWorkerOptions.workerSrc = PDFJS + "pdf.worker.min.mjs";
-    pdfjsLib = lib;
-    return lib;
-  }
-
-  function stopRender() {
-    renderToken++;
-    if (observer) { observer.disconnect(); observer = null; }
-    if (currentDoc) { currentDoc.destroy(); currentDoc = null; }
   }
 
   function openMobileViewer() {
@@ -476,119 +432,45 @@
     if (!viewerEl.classList.contains("open")) return;
     viewerEl.classList.remove("open");
     document.body.classList.remove("viewing");
-    stopRender();
     vbody.innerHTML = "";
+    activeId = null;
     if (!fromHistory) { try { history.back(); } catch (e) {} }
   }
   vclose.addEventListener("click", () => closeMobileViewer(false));
   window.addEventListener("popstate", () => closeMobileViewer(true)); // 휴대폰 뒤로가기 = 닫기
 
-  async function renderPage(doc, num, holder, token) {
-    const page = await doc.getPage(num);
-    if (token !== renderToken) return;
-    const base = page.getViewport({ scale: 1 });
-    holder.style.aspectRatio = `${base.width} / ${base.height}`;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const scale = (holder.clientWidth / base.width) * dpr;
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-    if (token !== renderToken) return;
-    holder.classList.remove("waiting");
-    holder.prepend(canvas);
-  }
-
-  async function renderPdf(url) {
-    stopRender();
-    const token = renderToken;
-    vbody.className = "pages";
-    vbody.innerHTML = '<div class="loading"><span id="ptext">자료를 불러오는 중…</span><div class="progress"><i id="pbar"></i></div></div>';
-    vbody.scrollTop = 0;
-    try {
-      const lib = await loadPdfJs();
-      const task = lib.getDocument({
-        url,
-        isEvalSupported: false,
-        cMapUrl: PDFJS.replace("legacy/build/", "cmaps/"),
-        cMapPacked: true,
-        standardFontDataUrl: PDFJS.replace("legacy/build/", "standard_fonts/")
-      });
-      task.onProgress = ({ loaded, total }) => {
-        if (token !== renderToken) return;
-        const bar = document.getElementById("pbar");
-        const txt = document.getElementById("ptext");
-        if (!bar || !txt) return;
-        const mb = (n) => (n / 1048576).toFixed(1);
-        if (total) {
-          const pct = Math.min(100, Math.round((loaded / total) * 100));
-          bar.style.width = pct + "%";
-          txt.textContent = `자료를 불러오는 중… ${pct}% (${mb(loaded)} / ${mb(total)}MB)`;
-        } else {
-          txt.textContent = `자료를 불러오는 중… ${mb(loaded)}MB`;
-        }
-      };
-      const doc = await task.promise;
-      if (token !== renderToken) { doc.destroy(); return; }
-      currentDoc = doc;
-      vbody.innerHTML = "";
-
-      // 페이지 자리를 먼저 만들고, 화면 가까이 오는 페이지부터 그림
-      observer = new IntersectionObserver((entries) => {
-        entries.forEach((en) => {
-          if (!en.isIntersecting) return;
-          const holder = en.target;
-          observer.unobserve(holder);
-          renderPage(doc, Number(holder.dataset.page), holder, token).catch(() => {});
-        });
-      }, { root: vbody, rootMargin: "600px 0px" });
-
-      for (let i = 1; i <= doc.numPages; i++) {
-        const holder = document.createElement("div");
-        holder.className = "page waiting";
-        holder.dataset.page = i;
-        holder.innerHTML = `<span class="page-no">${i} / ${doc.numPages}</span>`;
-        vbody.appendChild(holder);
-        observer.observe(holder);
-      }
-    } catch (e) {
-      if (token !== renderToken) return;
-      vbody.className = "empty";
-      vbody.innerHTML = "미리보기를 불러오지 못했어요.<br>위의 ‘원본 파일’을 눌러 열어 보세요.";
-    }
-  }
-
   function show(file, btn) {
-    const url = store.getPublicUrl(file.key).data.publicUrl;
-    activeKey = file.key;
+    activeId = file.id;
     document.querySelectorAll(".file.active").forEach((el) => el.classList.remove("active"));
     btn.classList.add("active");
-    vtitle.textContent = file.name;
-    vopen.href = url;
+    vtitle.textContent = displayName(file.name);
+    vopen.href = `https://drive.google.com/file/d/${encodeURIComponent(file.id)}/view`;
     vopen.hidden = false;
     openMobileViewer();
-    renderPdf(url);
+    vbody.className = "frame";
+    vbody.innerHTML = '<div class="frame-loading">자료를 여는 중…</div>';
+    const frame = document.createElement("iframe");
+    frame.src = `https://drive.google.com/file/d/${encodeURIComponent(file.id)}/preview`;
+    frame.title = displayName(file.name);
+    frame.allow = "autoplay";
+    vbody.appendChild(frame);
   }
 
-  /* ---------- 비밀번호 확인 후 삭제 ---------- */
+  /* ---------- 비밀번호 확인 후 삭제 (비밀번호는 구글 서버에서 확인) ---------- */
   const delModal = document.getElementById("delModal");
   const delForm = document.getElementById("delForm");
   const delName = document.getElementById("delName");
   const delPw = document.getElementById("delPw");
   const delErr = document.getElementById("delErr");
+  const delSubmit = delForm.querySelector(".danger");
   let pendingDelete = null;
-
-  async function sha256(text) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
 
   function askDelete(file) {
     pendingDelete = file;
-    delName.textContent = `'${file.name}' 자료를 삭제하려면 비밀번호를 입력하세요. 삭제하면 모든 사람의 화면에서 사라져요.`;
+    delName.textContent = `'${displayName(file.name)}' 자료를 삭제하려면 비밀번호를 입력하세요. 삭제하면 모든 사람의 화면에서 사라져요.`;
     delPw.value = "";
     delErr.textContent = "";
+    delSubmit.disabled = false;
     delModal.hidden = false;
     setTimeout(() => delPw.focus(), 50);
   }
@@ -603,46 +485,91 @@
   delForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const f = pendingDelete;
-    if (!f) return;
-    if ((await sha256(delPw.value.trim())) !== DELETE_PW_HASH) {
-      delErr.textContent = "비밀번호가 맞지 않아요.";
+    if (!f || delSubmit.disabled) return;
+    delSubmit.disabled = true;
+    delErr.textContent = "확인하는 중…";
+    try {
+      await apiPost({ action: "delete", id: f.id, password: delPw.value.trim() });
+    } catch (err) {
+      delErr.textContent = err.message;
+      delSubmit.disabled = false;
       delPw.select();
       return;
     }
-    const { error } = await store.remove([f.key]);
-    if (error) { delErr.textContent = "삭제하지 못했어요: " + error.message; return; }
     closeDelete();
-    if (f.key === activeKey) resetViewer();
+    if (f.id === activeId) resetViewer();
     setStatus("삭제했어요.");
     render();
   });
 
+  /* ---------- 공통 / 1반~10반 탭 ---------- */
+  const CLASS_COUNT = 10;
+  const SECTIONS = [{ id: "common", label: "공통 자료" }];
+  for (let n = 1; n <= CLASS_COUNT; n++) SECTIONS.push({ id: "class" + n, label: n + "반" });
+
+  const tabsEl = document.getElementById("tabs");
+  const listTitle = document.getElementById("listTitle");
+  let current = SECTIONS[0];
+  let listToken = 0;
+
+  SECTIONS.forEach((sec) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tab" + (sec.id === "common" ? " common" : "");
+    b.textContent = sec.id === "common" ? "공통" : sec.label;
+    b.dataset.id = sec.id;
+    b.setAttribute("role", "tab");
+    b.addEventListener("click", () => { location.hash = sec.id; });
+    tabsEl.appendChild(b);
+  });
+
+  function selectFromHash() {
+    const id = decodeURIComponent(location.hash.slice(1));
+    current = SECTIONS.find((sec) => sec.id === id) || SECTIONS[0];
+    tabsEl.querySelectorAll(".tab").forEach((b) => {
+      const on = b.dataset.id === current.id;
+      b.setAttribute("aria-selected", on ? "true" : "false");
+      if (on) b.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+    const isCommon = current.id === "common";
+    listTitle.textContent = isCommon ? "공통 자료" : current.label + " 자료";
+    document.getElementById("dropTarget").textContent = isCommon ? "공통 자료" : current.label;
+    document.title = (isCommon ? "" : current.label + " · ") + "함현고 제주 수학여행 자료실";
+    countEl.textContent = "";
+    list.innerHTML = '<li class="empty">불러오는 중…</li>';
+    setStatus("");
+    if (viewerEl.classList.contains("open")) closeMobileViewer(true);
+    resetViewer();
+    render();
+  }
+  window.addEventListener("hashchange", selectFromHash);
+
+  /* ---------- 목록 ---------- */
   async function render() {
-    if (!store) {
-      list.innerHTML = '<li class="empty">아직 저장 공간이 연결되지 않았어요.<br>' + setupProblem + '</li>';
+    if (!configured) {
+      list.innerHTML = '<li class="empty">아직 구글 드라이브가 연결되지 않았어요.<br>index.html의 SCRIPT_URL에 웹 앱 주소를 넣어 주세요.</li>';
       drop.classList.add("busy");
       return;
     }
 
-    const { data, error } = await store.list("", {
-      limit: 1000,
-      sortBy: { column: "name", order: "asc" }
-    });
-    if (error) {
-      setStatus("목록을 불러오지 못했어요: " + error.message, true);
+    const sec = current;
+    const token = ++listToken;
+    let files;
+    try {
+      files = (await apiGet({ action: "list", section: sec.id })).files;
+    } catch (err) {
+      if (token !== listToken) return;
+      setStatus("목록을 불러오지 못했어요: " + err.message, true);
+      if (!list.querySelector(".file")) list.innerHTML = '<li class="empty">목록을 불러오지 못했어요.<br>↻ 새로고침을 눌러 다시 시도해 보세요.</li>';
       return;
     }
-
-    const files = data
-      .filter((o) => /\.pdf$/i.test(o.name))
-      .map((o) => ({ key: o.name, ...parseKey(o.name) }))
-      .sort((a, b) => a.time - b.time); // 올린 순서대로
+    if (token !== listToken) return; // 그 사이 다른 반을 눌렀으면 무시
 
     countEl.textContent = files.length ? `${files.length}개` : "";
     list.innerHTML = "";
 
     if (!files.length) {
-      list.innerHTML = '<li class="empty">아직 올라온 자료가 없어요.<br>위에서 PDF를 올려 보세요.</li>';
+      list.innerHTML = `<li class="empty">아직 ${sec.id === "common" ? "공통" : sec.label} 자료가 없어요.<br>위에서 PDF를 올려 보세요.</li>`;
       return;
     }
 
@@ -650,17 +577,17 @@
       const li = document.createElement("li");
 
       const btn = document.createElement("button");
-      btn.className = "file" + (f.key === activeKey ? " active" : "");
+      btn.className = "file" + (f.id === activeId ? " active" : "");
       btn.innerHTML = `<span class="num">${i + 1}</span>
         <span class="meta"><span class="fname"></span><span class="fdate"></span></span>`;
-      btn.querySelector(".fname").textContent = f.name;
-      btn.querySelector(".fdate").textContent = f.time ? fmtDate(f.time) + " 업로드" : "";
+      btn.querySelector(".fname").textContent = displayName(f.name);
+      btn.querySelector(".fdate").textContent = fmtDate(f.time) + " 업로드 · " + fmtSize(f.size);
       btn.addEventListener("click", () => show(f, btn));
 
       const del = document.createElement("button");
       del.className = "del";
       del.title = "삭제";
-      del.setAttribute("aria-label", f.name + " 삭제");
+      del.setAttribute("aria-label", displayName(f.name) + " 삭제");
       del.textContent = "×";
       del.addEventListener("click", () => askDelete(f));
 
@@ -669,32 +596,54 @@
     });
   }
 
+  /* ---------- 업로드 ---------- */
+  function readBase64(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+
   async function handleFiles(fileList) {
-    if (!store) return;
+    if (!configured) return;
+    const sec = current;
     const all = Array.from(fileList);
     const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
-    const skipped = all.length - pdfs.length;
-    if (!pdfs.length) { setStatus("PDF 파일만 올릴 수 있어요.", true); return; }
+    const notPdf = all.length - pdfs.length;
+    const tooBig = pdfs.filter((f) => f.size > MAX_MB * 1048576);
+    const ok = pdfs.filter((f) => f.size <= MAX_MB * 1048576);
+
+    if (!ok.length) {
+      setStatus(tooBig.length
+        ? `${MAX_MB}MB보다 큰 파일은 올릴 수 없어요. PDF를 압축해서 올려 주세요.`
+        : "PDF 파일만 올릴 수 있어요.", true);
+      return;
+    }
 
     drop.classList.add("busy");
-    let ok = 0;
+    let done = 0;
     const fails = [];
-    for (let i = 0; i < pdfs.length; i++) {
-      const f = pdfs[i];
-      setStatus(`올리는 중… (${i + 1}/${pdfs.length}) ${f.name}`);
-      const key = `${Date.now()}_${encodeName(f.name.replace(/\.pdf$/i, ""))}.pdf`;
-      const { error } = await store.upload(key, f, { contentType: "application/pdf", upsert: false });
-      if (error) fails.push(`${f.name} (${error.message})`);
-      else ok++;
-      await new Promise((r) => setTimeout(r, 5)); // 시각이 겹치지 않도록
+    for (let i = 0; i < ok.length; i++) {
+      const f = ok[i];
+      setStatus(`${sec.label}에 올리는 중… (${i + 1}/${ok.length}) ${f.name}`);
+      try {
+        const data = await readBase64(f);
+        await apiPost({ action: "upload", section: sec.id, name: f.name, data });
+        done++;
+      } catch (err) {
+        fails.push(`${f.name} (${err.message})`);
+      }
     }
     drop.classList.remove("busy");
-    await render();
+    if (sec === current) await render();
 
-    let msg = `${ok}개 자료를 올렸어요.`;
-    if (skipped) msg += ` PDF가 아닌 파일 ${skipped}개는 제외했어요.`;
+    let msg = `${sec.label}에 ${done}개 자료를 올렸어요.`;
+    if (notPdf) msg += ` PDF가 아닌 파일 ${notPdf}개는 제외했어요.`;
+    if (tooBig.length) msg += ` ${MAX_MB}MB가 넘는 파일 ${tooBig.length}개는 압축 후 올려 주세요.`;
     if (fails.length) msg += ` 실패: ${fails.join(", ")}`;
-    setStatus(msg, fails.length > 0);
+    setStatus(msg, fails.length > 0 || tooBig.length > 0);
   }
 
   picker.addEventListener("change", () => { handleFiles(picker.files); picker.value = ""; });
@@ -707,11 +656,11 @@
   drop.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
   document.getElementById("refresh").addEventListener("click", () => { setStatus(""); render(); });
 
-  // 다른 사람이 올린 자료도 자동으로 반영 (30초마다, 창으로 돌아올 때)
-  setInterval(render, 30000);
+  // 다른 사람이 올린 자료도 반영 (1분마다, 화면을 보고 있을 때만 / 창으로 돌아올 때)
+  setInterval(() => { if (!document.hidden) render(); }, 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 
-  render();
+  selectFromHash();
 </script>
 </body>
 </html>
