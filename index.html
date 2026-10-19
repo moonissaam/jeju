@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>함현고 제주 수학여행 자료실</title>
+<title>제주 수학여행 자료실</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -137,6 +137,15 @@
   .drop input { display: none; }
   .status { min-height: 20px; font-size: 13px; color: var(--sea-deep); margin: -6px 0 10px; }
   .status.err { color: var(--danger); }
+  .hint {
+    margin: 0 0 10px;
+    padding: 9px 12px;
+    background: #fff4e6;
+    border-radius: 10px;
+    font-size: 14px;
+    color: #9a520e;
+  }
+  .hint[hidden] { display: none; }
 
   ol.files { list-style: none; margin: 0; padding: 0; }
   ol.files li { display: flex; gap: 6px; align-items: stretch; }
@@ -305,9 +314,9 @@
 <body>
 <header>
   <div class="wrap">
-    <span class="eyebrow">함현고 수학여행</span>
-    <h1>함현고 제주 수학여행 자료실</h1>
-    <p>일정표, 안내문, 활동지 등 수학여행 자료를 올리고 함께 볼 수 있어요.</p>
+    <span class="eyebrow">2026 함현고 2학년 주제별 체험학습</span>
+    <h1>제주 수학여행 자료실</h1>
+    <p>수학여행 자료를 직접 올리고 함께 볼 수 있어요. (pdf파일만 올려주세요.)</p>
   </div>
 </header>
 
@@ -330,6 +339,7 @@
       </label>
       <div class="status" id="status"></div>
 
+      <p class="hint" id="hint" hidden>👆 파일 제목을 클릭하면 내용이 보여요.</p>
       <ol class="files" id="list"></ol>
     </section>
 
@@ -534,8 +544,9 @@
     const isCommon = current.id === "common";
     listTitle.textContent = isCommon ? "공통 자료" : current.label + " 자료";
     document.getElementById("dropTarget").textContent = isCommon ? "공통 자료" : current.label;
-    document.title = (isCommon ? "" : current.label + " · ") + "함현고 제주 수학여행 자료실";
+    document.title = (isCommon ? "" : current.label + " · ") + "제주 수학여행 자료실";
     countEl.textContent = "";
+    document.getElementById("hint").hidden = true;
     list.innerHTML = '<li class="empty">불러오는 중…</li>';
     setStatus("");
     if (viewerEl.classList.contains("open")) closeMobileViewer(true);
@@ -566,6 +577,7 @@
     if (token !== listToken) return; // 그 사이 다른 반을 눌렀으면 무시
 
     countEl.textContent = files.length ? `${files.length}개` : "";
+    document.getElementById("hint").hidden = !files.length;
     list.innerHTML = "";
 
     if (!files.length) {
