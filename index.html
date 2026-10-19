@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>제주 수학여행 자료실</title>
+<title>함현고 제주 수학여행 자료실</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
@@ -52,10 +52,11 @@
     font-weight: 700;
   }
   h1 {
-    font-family: "Gowun Dodum", sans-serif;
-    font-size: clamp(30px, 5vw, 46px);
+    font-family: "Noto Sans KR", "Malgun Gothic", sans-serif;
+    font-size: clamp(28px, 5vw, 44px);
     margin: 14px 0 6px;
-    font-weight: 400;
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
   header p { margin: 0; opacity: .85; }
 
@@ -192,8 +193,8 @@
 <body>
 <header>
   <div class="wrap">
-    <span class="eyebrow">수학여행</span>
-    <h1>제주 수학여행 자료실</h1>
+    <span class="eyebrow">함현고 수학여행</span>
+    <h1>함현고 제주 수학여행 자료실</h1>
     <p>일정표, 안내문, 활동지 등 수학여행 자료를 올리고 함께 볼 수 있어요.</p>
   </div>
 </header>
@@ -247,9 +248,27 @@
   let activeKey = null;
   let store = null;
 
-  const configured = SUPABASE_URL.startsWith("http") && !SUPABASE_KEY.startsWith("여기에");
-  if (configured && window.supabase) {
-    store = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY).storage.from(BUCKET);
+  // 입력값 정리: 앞뒤 공백 제거, https:// 자동 추가, 끝의 / 나 경로 제거
+  let projectUrl = SUPABASE_URL.trim();
+  if (projectUrl && !projectUrl.startsWith("여기에") && !/^https?:\/\//i.test(projectUrl)) {
+    projectUrl = "https://" + projectUrl;
+  }
+  projectUrl = projectUrl.replace(/(\.supabase\.co).*$/i, "$1").replace(/\/+$/, "");
+  const projectKey = SUPABASE_KEY.trim();
+
+  let setupProblem = "";
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(projectUrl)) {
+    setupProblem = "SUPABASE_URL 값이 올바르지 않아요.<br>https://프로젝트ID.supabase.co 형태로 넣어 주세요.";
+  } else if (!projectKey || projectKey.startsWith("여기에")) {
+    setupProblem = "SUPABASE_KEY 값이 비어 있어요.<br>Publishable key를 붙여 넣어 주세요.";
+  } else if (!window.supabase) {
+    setupProblem = "Supabase 프로그램을 불러오지 못했어요.<br>인터넷 연결을 확인하거나, 학교망이라면 다른 네트워크에서 열어 보세요.";
+  } else {
+    try {
+      store = window.supabase.createClient(projectUrl, projectKey).storage.from(BUCKET);
+    } catch (e) {
+      setupProblem = "Supabase 연결 중 오류가 났어요: " + e.message;
+    }
   }
 
   /* 한글 파일 이름을 안전하게 저장하기 위한 변환
@@ -317,7 +336,7 @@
 
   async function render() {
     if (!store) {
-      list.innerHTML = '<li class="empty">아직 저장 공간이 연결되지 않았어요.<br>index.html 아래쪽의 Supabase 설정 두 줄을 채워 주세요.</li>';
+      list.innerHTML = '<li class="empty">아직 저장 공간이 연결되지 않았어요.<br>' + setupProblem + '</li>';
       drop.classList.add("busy");
       return;
     }
