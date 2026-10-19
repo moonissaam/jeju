@@ -205,6 +205,30 @@
   }
   .page + .page { margin-top: 12px; }
   .page canvas { display: block; width: 100%; height: auto; }
+  .page.waiting::before {
+    content: "페이지 그리는 중…";
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .progress {
+    width: min(260px, 80%);
+    height: 8px;
+    margin: 14px auto 0;
+    background: #ddd6c8;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--sea);
+    transition: width .2s;
+  }
   .page-no {
     position: absolute;
     right: 8px; bottom: 8px;
@@ -415,6 +439,7 @@
     canvas.height = Math.floor(viewport.height);
     await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
     if (token !== renderToken) return;
+    holder.classList.remove("waiting");
     holder.prepend(canvas);
   }
 
@@ -422,11 +447,32 @@
     stopRender();
     const token = renderToken;
     vbody.className = "pages";
-    vbody.innerHTML = '<div class="loading">자료를 불러오는 중…</div>';
+    vbody.innerHTML = '<div class="loading"><span id="ptext">자료를 불러오는 중…</span><div class="progress"><i id="pbar"></i></div></div>';
     vbody.scrollTop = 0;
     try {
       const lib = await loadPdfJs();
-      const doc = await lib.getDocument({ url, isEvalSupported: false }).promise;
+      const task = lib.getDocument({
+        url,
+        isEvalSupported: false,
+        cMapUrl: PDFJS.replace("legacy/build/", "cmaps/"),
+        cMapPacked: true,
+        standardFontDataUrl: PDFJS.replace("legacy/build/", "standard_fonts/")
+      });
+      task.onProgress = ({ loaded, total }) => {
+        if (token !== renderToken) return;
+        const bar = document.getElementById("pbar");
+        const txt = document.getElementById("ptext");
+        if (!bar || !txt) return;
+        const mb = (n) => (n / 1048576).toFixed(1);
+        if (total) {
+          const pct = Math.min(100, Math.round((loaded / total) * 100));
+          bar.style.width = pct + "%";
+          txt.textContent = `자료를 불러오는 중… ${pct}% (${mb(loaded)} / ${mb(total)}MB)`;
+        } else {
+          txt.textContent = `자료를 불러오는 중… ${mb(loaded)}MB`;
+        }
+      };
+      const doc = await task.promise;
       if (token !== renderToken) { doc.destroy(); return; }
       currentDoc = doc;
       vbody.innerHTML = "";
@@ -443,7 +489,7 @@
 
       for (let i = 1; i <= doc.numPages; i++) {
         const holder = document.createElement("div");
-        holder.className = "page";
+        holder.className = "page waiting";
         holder.dataset.page = i;
         holder.innerHTML = `<span class="page-no">${i} / ${doc.numPages}</span>`;
         vbody.appendChild(holder);
