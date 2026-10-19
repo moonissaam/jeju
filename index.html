@@ -6,6 +6,7 @@
 <title>제주 수학여행 자료실</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root {
     --sea: #0e6e8c;
@@ -71,10 +72,21 @@
     border-radius: 16px;
     padding: 18px;
   }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .panel h2 { font-size: 18px; margin: 0; }
-  .count { color: var(--muted); font-size: 14px; margin-left: 6px; }
+  .count { color: var(--muted); font-size: 14px; margin-left: 6px; font-weight: 400; }
+  .refresh {
+    border: 1px solid var(--line);
+    background: #fff;
+    border-radius: 8px;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .refresh:hover { color: var(--sea); border-color: var(--sea); }
 
-  /* 업로드 영역 */
   .drop {
     display: block;
     margin: 14px 0 16px;
@@ -87,6 +99,7 @@
     transition: background .15s, border-color .15s;
   }
   .drop:hover, .drop.over { background: #e3f2f6; border-color: var(--sea); }
+  .drop.busy { opacity: .6; pointer-events: none; }
   .drop strong { display: block; color: var(--sea-deep); font-size: 16px; }
   .drop span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
   .drop input { display: none; }
@@ -181,14 +194,17 @@
   <div class="wrap">
     <span class="eyebrow">수학여행</span>
     <h1>제주 수학여행 자료실</h1>
-    <p>일정표, 안내문, 활동지 등 수학여행 자료를 올리고 바로 볼 수 있어요.</p>
+    <p>일정표, 안내문, 활동지 등 수학여행 자료를 올리고 함께 볼 수 있어요.</p>
   </div>
 </header>
 
 <main>
   <div class="wrap layout">
     <section class="panel">
-      <h2>자료 목록<span class="count" id="count"></span></h2>
+      <div class="panel-head">
+        <h2>자료 목록<span class="count" id="count"></span></h2>
+        <button class="refresh" id="refresh" type="button">↻ 새로고침</button>
+      </div>
 
       <label class="drop" id="drop">
         <input type="file" id="picker" accept="application/pdf,.pdf" multiple>
@@ -211,68 +227,14 @@
 </main>
 
 <script>
-  /* ---------- 저장소 (브라우저 IndexedDB) ---------- */
-  const DB_NAME = "jeju-trip-files";
-  const STORE = "files";
-  let memory = [];          // IndexedDB를 못 쓸 때 임시 저장
-  let dbPromise = null;
+  /* ============================================================
+     ▼ Supabase 설정 — 이 두 줄만 본인 값으로 바꿔 주세요
+     ============================================================ */
+  const SUPABASE_URL = "waslzzheyllzjtdisnlt";
+  const SUPABASE_KEY = "sb_publishable_6Vaoz6fefDW9cvdeiNkCUA_4CyglM-O";
+  const BUCKET = "trip";
+  /* ============================================================ */
 
-  function openDB() {
-    if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      try {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onupgradeneeded = () => {
-          req.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      } catch (e) { reject(e); }
-    });
-    return dbPromise;
-  }
-
-  async function getAll() {
-    try {
-      const db = await openDB();
-      return await new Promise((res, rej) => {
-        const r = db.transaction(STORE).objectStore(STORE).getAll();
-        r.onsuccess = () => res(r.result);
-        r.onerror = () => rej(r.error);
-      });
-    } catch (e) { return memory.slice(); }
-  }
-
-  async function add(record) {
-    try {
-      const db = await openDB();
-      await new Promise((res, rej) => {
-        const tx = db.transaction(STORE, "readwrite");
-        tx.objectStore(STORE).add(record);
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-    } catch (e) {
-      record.id = Date.now() + Math.random();
-      memory.push(record);
-    }
-  }
-
-  async function remove(id) {
-    try {
-      const db = await openDB();
-      await new Promise((res, rej) => {
-        const tx = db.transaction(STORE, "readwrite");
-        tx.objectStore(STORE).delete(id);
-        tx.oncomplete = res;
-        tx.onerror = () => rej(tx.error);
-      });
-    } catch (e) {
-      memory = memory.filter((f) => f.id !== id);
-    }
-  }
-
-  /* ---------- 화면 ---------- */
   const list = document.getElementById("list");
   const countEl = document.getElementById("count");
   const statusEl = document.getElementById("status");
@@ -282,10 +244,36 @@
   const vopen = document.getElementById("vopen");
   const vbody = document.getElementById("vbody");
 
-  let currentUrl = null;
-  let activeId = null;
+  let activeKey = null;
+  let store = null;
 
-  const displayName = (n) => n.replace(/\.pdf$/i, "");
+  const configured = SUPABASE_URL.startsWith("http") && !SUPABASE_KEY.startsWith("여기에");
+  if (configured && window.supabase) {
+    store = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY).storage.from(BUCKET);
+  }
+
+  /* 한글 파일 이름을 안전하게 저장하기 위한 변환
+     저장 이름 형식: 업로드시각_인코딩된원래이름.pdf  → 시각 순으로 정렬됨 */
+  function encodeName(name) {
+    const bytes = new TextEncoder().encode(name);
+    let bin = "";
+    bytes.forEach((b) => (bin += String.fromCharCode(b)));
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function decodeName(enc) {
+    try {
+      let s = enc.replace(/-/g, "+").replace(/_/g, "/");
+      while (s.length % 4) s += "=";
+      const bin = atob(s);
+      return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
+    } catch (e) { return enc; }
+  }
+  function parseKey(key) {
+    const m = key.match(/^(\d+)_(.+)\.pdf$/i);
+    if (!m) return { time: 0, name: key.replace(/\.pdf$/i, "") };
+    return { time: Number(m[1]), name: decodeName(m[2]).replace(/\.pdf$/i, "") };
+  }
+
   const fmtDate = (t) => new Date(t).toLocaleString("ko-KR", {
     month: "long", day: "numeric", hour: "2-digit", minute: "2-digit"
   });
@@ -296,9 +284,7 @@
   }
 
   function resetViewer() {
-    if (currentUrl) URL.revokeObjectURL(currentUrl);
-    currentUrl = null;
-    activeId = null;
+    activeKey = null;
     vtitle.textContent = "자료를 선택하세요";
     vopen.hidden = true;
     vbody.className = "empty";
@@ -310,30 +296,46 @@
     navigator.pdfViewerEnabled !== false;
 
   function show(file, btn) {
-    const blob = file.blob instanceof Blob ? file.blob : new Blob([file.blob], { type: "application/pdf" });
-    if (currentUrl) URL.revokeObjectURL(currentUrl);
-    currentUrl = URL.createObjectURL(blob);
-
+    const url = store.getPublicUrl(file.key).data.publicUrl;
     if (!inlineViewer()) {
-      window.open(currentUrl, "_blank");
+      window.open(url, "_blank", "noopener");
       return;
     }
-    activeId = file.id;
+    activeKey = file.key;
     document.querySelectorAll(".file.active").forEach((el) => el.classList.remove("active"));
     btn.classList.add("active");
-    vtitle.textContent = displayName(file.name);
-    vopen.href = currentUrl;
+    vtitle.textContent = file.name;
+    vopen.href = url;
     vopen.hidden = false;
     vbody.className = "";
     vbody.innerHTML = "";
     const frame = document.createElement("iframe");
-    frame.src = currentUrl;
-    frame.title = displayName(file.name);
+    frame.src = url;
+    frame.title = file.name;
     vbody.appendChild(frame);
   }
 
   async function render() {
-    const files = (await getAll()).sort((a, b) => a.addedAt - b.addedAt); // 올린 순서대로
+    if (!store) {
+      list.innerHTML = '<li class="empty">아직 저장 공간이 연결되지 않았어요.<br>index.html 아래쪽의 Supabase 설정 두 줄을 채워 주세요.</li>';
+      drop.classList.add("busy");
+      return;
+    }
+
+    const { data, error } = await store.list("", {
+      limit: 1000,
+      sortBy: { column: "name", order: "asc" }
+    });
+    if (error) {
+      setStatus("목록을 불러오지 못했어요: " + error.message, true);
+      return;
+    }
+
+    const files = data
+      .filter((o) => /\.pdf$/i.test(o.name))
+      .map((o) => ({ key: o.name, ...parseKey(o.name) }))
+      .sort((a, b) => a.time - b.time); // 올린 순서대로
+
     countEl.textContent = files.length ? `${files.length}개` : "";
     list.innerHTML = "";
 
@@ -346,22 +348,24 @@
       const li = document.createElement("li");
 
       const btn = document.createElement("button");
-      btn.className = "file" + (f.id === activeId ? " active" : "");
+      btn.className = "file" + (f.key === activeKey ? " active" : "");
       btn.innerHTML = `<span class="num">${i + 1}</span>
         <span class="meta"><span class="fname"></span><span class="fdate"></span></span>`;
-      btn.querySelector(".fname").textContent = displayName(f.name);
-      btn.querySelector(".fdate").textContent = fmtDate(f.addedAt) + " 업로드";
+      btn.querySelector(".fname").textContent = f.name;
+      btn.querySelector(".fdate").textContent = f.time ? fmtDate(f.time) + " 업로드" : "";
       btn.addEventListener("click", () => show(f, btn));
 
       const del = document.createElement("button");
       del.className = "del";
       del.title = "삭제";
-      del.setAttribute("aria-label", displayName(f.name) + " 삭제");
+      del.setAttribute("aria-label", f.name + " 삭제");
       del.textContent = "×";
       del.addEventListener("click", async () => {
-        if (!confirm(`'${displayName(f.name)}' 자료를 삭제할까요?`)) return;
-        await remove(f.id);
-        if (f.id === activeId) resetViewer();
+        if (!confirm(`'${f.name}' 자료를 삭제할까요?\n모든 사람의 화면에서 사라져요.`)) return;
+        const { error } = await store.remove([f.key]);
+        if (error) { setStatus("삭제하지 못했어요: " + error.message, true); return; }
+        if (f.key === activeKey) resetViewer();
+        setStatus("삭제했어요.");
         render();
       });
 
@@ -371,27 +375,34 @@
   }
 
   async function handleFiles(fileList) {
+    if (!store) return;
     const all = Array.from(fileList);
     const pdfs = all.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
     const skipped = all.length - pdfs.length;
-    if (!pdfs.length) {
-      setStatus("PDF 파일만 올릴 수 있어요.", true);
-      return;
-    }
-    setStatus("올리는 중…");
-    const base = Date.now();
+    if (!pdfs.length) { setStatus("PDF 파일만 올릴 수 있어요.", true); return; }
+
+    drop.classList.add("busy");
+    let ok = 0;
+    const fails = [];
     for (let i = 0; i < pdfs.length; i++) {
       const f = pdfs[i];
-      await add({ name: f.name, size: f.size, addedAt: base + i, blob: f });
+      setStatus(`올리는 중… (${i + 1}/${pdfs.length}) ${f.name}`);
+      const key = `${Date.now()}_${encodeName(f.name.replace(/\.pdf$/i, ""))}.pdf`;
+      const { error } = await store.upload(key, f, { contentType: "application/pdf", upsert: false });
+      if (error) fails.push(`${f.name} (${error.message})`);
+      else ok++;
+      await new Promise((r) => setTimeout(r, 5)); // 시각이 겹치지 않도록
     }
+    drop.classList.remove("busy");
     await render();
-    setStatus(`${pdfs.length}개 자료를 올렸어요.` + (skipped ? ` (PDF가 아닌 파일 ${skipped}개는 제외)` : ""));
+
+    let msg = `${ok}개 자료를 올렸어요.`;
+    if (skipped) msg += ` PDF가 아닌 파일 ${skipped}개는 제외했어요.`;
+    if (fails.length) msg += ` 실패: ${fails.join(", ")}`;
+    setStatus(msg, fails.length > 0);
   }
 
-  picker.addEventListener("change", () => {
-    handleFiles(picker.files);
-    picker.value = "";
-  });
+  picker.addEventListener("change", () => { handleFiles(picker.files); picker.value = ""; });
   ["dragenter", "dragover"].forEach((ev) =>
     drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); })
   );
@@ -399,6 +410,11 @@
     drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); })
   );
   drop.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+  document.getElementById("refresh").addEventListener("click", () => { setStatus(""); render(); });
+
+  // 다른 사람이 올린 자료도 자동으로 반영 (30초마다, 창으로 돌아올 때)
+  setInterval(render, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
 
   render();
 </script>
